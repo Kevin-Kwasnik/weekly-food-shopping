@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 from strands import Agent
 from strands.models.ollama import OllamaModel
 
+#tools
+import tools.kroger_products
+
 load_dotenv()
 
 model = OllamaModel(
@@ -12,7 +15,7 @@ model = OllamaModel(
 
 agent = Agent(
     model=model,
-   
+    tools=[tools.kroger_products.search_kroger_products],
     system_prompt="You are an grocery shopping agent. Please prioritize the users preferences."
 )
 
