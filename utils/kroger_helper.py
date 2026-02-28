@@ -35,9 +35,6 @@ def get_kroger_token(
         resp.raise_for_status()  # nicer error than manual check
         token = resp.json()["access_token"]
         
-        # Optional: print for debugging (remove before submission)
-        print(f"Token fetched successfully (length: {len(token)})")
-        
         return token
     except requests.RequestException as e:
         raise ValueError(f"Kroger token request failed: {str(e)}") from e
