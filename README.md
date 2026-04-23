@@ -1,6 +1,8 @@
 # Weekly Food Shopping Agent
 
-An AI-powered grocery shopping assistant built with the [Strands Agents SDK](https://github.com/strands-ai/strands), backed by the Kroger API, with full OpenTelemetry tracing and LLM-as-a-judge correctness evals via [Arize Phoenix](https://arize.com/docs/phoenix).
+Companion code for [*LLM-as-Judge as a Live Backend Evaluator: A Product Prototype for Reliable Tool-Using Agents*](Final_Report.tex) (ECE 57000, Spring 2026).
+
+An AI-powered grocery shopping assistant built with the [Strands Agents SDK](https://github.com/strands-ai/strands), backed by the Kroger API, with full OpenTelemetry tracing and LLM-as-a-judge faithfulness and tool invocation evals via [Arize Phoenix](https://arize.com/docs/phoenix).
 
 ---
 
@@ -194,6 +196,7 @@ Ensure `KROGER_CLIENT_ID` and `KROGER_CLIENT_SECRET` are set and your app has th
 
 ## References
 
+- [Final Report (LaTeX)](Final_Report.tex) — *LLM-as-Judge as a Live Backend Evaluator*, ECE 57000 Spring 2026
 - [Strands Agents SDK](https://github.com/strands-agents/sdk-python)
 - [Arize Phoenix Docs](https://arize.com/docs/phoenix)
 - [Phoenix Environments](https://arize.com/docs/phoenix/environments)
