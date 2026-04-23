@@ -194,7 +194,7 @@ Ensure `KROGER_CLIENT_ID` and `KROGER_CLIENT_SECRET` are set and your app has th
 
 ## References
 
-- [Strands Agents SDK](https://github.com/strands-ai/strands)
+- [Strands Agents SDK](https://github.com/strands-agents/sdk-python)
 - [Arize Phoenix Docs](https://arize.com/docs/phoenix)
 - [Phoenix Environments](https://arize.com/docs/phoenix/environments)
 - [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference)
