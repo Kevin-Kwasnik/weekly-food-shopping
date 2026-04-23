@@ -1,6 +1,6 @@
-# 🛒 Weekly Food Shopping Agent
+# Weekly Food Shopping Agent
 
-An AI-powered grocery shopping assistant built with the [Strands Agents SDK](https://github.com/strands-ai/strands), backed by the Kroger API, with full OpenTelemetry tracing and LLM-as-a-judge faithfulness evals via [Arize Phoenix](https://arize.com/docs/phoenix).
+An AI-powered grocery shopping assistant built with the [Strands Agents SDK](https://github.com/strands-ai/strands), backed by the Kroger API, with full OpenTelemetry tracing and LLM-as-a-judge correctness evals via [Arize Phoenix](https://arize.com/docs/phoenix).
 
 ---
 
@@ -27,17 +27,17 @@ weekly-food-shopping/
 - **Kroger API integration** — searches real product catalog with pricing and UPC
 - **OpenTelemetry tracing** — every agent call, LLM invocation, and tool call traced
 - **Arize Phoenix observability** — traces visible at `http://localhost:6006`
-- **Faithfulness evals** — automatic LLM-as-a-judge evaluation of agent responses after each session
+- **Faithfulness evals** — detects hallucinated products or prices not grounded in actual Kroger results
+- **Tool invocation evals** — validates that `search_kroger_products` was called with sensible arguments
 
 ---
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/) package manager
 - An [Ollama Cloud](https://ollama.com) account and API key
 - A [Kroger Developer](https://developer.kroger.com) app (client ID + secret)
-- An [Anthropic](https://console.anthropic.com) API key (for eval judge)
 
 ---
 
@@ -64,11 +64,8 @@ cp .env.example .env
 KROGER_CLIENT_ID=your_kroger_client_id
 KROGER_CLIENT_SECRET=your_kroger_client_secret
 
-# Ollama Cloud
+# Ollama Cloud (used for the agent model and eval judge)
 OLLAMA_API_KEY=your_ollama_api_key
-
-# Anthropic (used as LLM judge for evals)
-ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 ### 3. Start Phoenix locally
@@ -83,11 +80,7 @@ uv add arize-phoenix
 phoenix serve
 # Phoenix UI available at http://localhost:6006
 
-# Option B — From Python (useful in notebooks)
-import phoenix as px
-px.launch_app()
-
-# Option C — Docker
+# Option B — Docker
 docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
 ```
 
@@ -98,7 +91,6 @@ docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
 | Environment | How to run | Best for |
 |---|---|---|
 | **Terminal** | `phoenix serve` | Local development |
-| **Notebook** | `px.launch_app()` | Experiments & exploration |
 | **Docker** | `docker run arizephoenix/phoenix` | Persistent / team use |
 | **Phoenix Cloud** | [app.phoenix.arize.com](https://app.phoenix.arize.com) | Managed, no setup |
 
@@ -121,10 +113,12 @@ Agent: I found some chicken options for you! Here are the top results...
 You: exit
 Exiting Grocery Assistant. Goodbye!
 
-Flushing traces to Phoenix...
-Running faithfulness evals...
-Evaluating 3 agent spans...
-Evals logged — check http://localhost:6006
+Flushing traces to Arize...
+Running evals...
+Running faithfulness evals on 3 agent spans...
+  -> faithfulness annotations logged — check http://localhost:6006
+Running tool invocation evals on 3 tool spans...
+  -> tool_invocation annotations logged — check http://localhost:6006
 ```
 
 ---
@@ -141,20 +135,25 @@ Every session automatically sends traces to your local Phoenix instance. Open `h
 
 Traces follow the [OpenInference](https://github.com/Arize-ai/openinference) semantic conventions, compatible with Arize AX and any OTLP-compatible backend.
 
-### Faithfulness Evals
+### Evals
 
-At the end of each session, the agent automatically runs faithfulness evaluations using Claude as the judge. Faithfulness measures whether the agent's responses are grounded in what the Kroger tool actually returned — detecting hallucinated products or prices.
+Two LLM-as-a-judge evaluations run automatically at the end of each session, using an Ollama Cloud model as the judge.
 
-Results are logged back to Phoenix as span annotations and visible alongside traces in the UI.
+**Faithfulness** (on agent spans) — checks whether the agent's response is grounded in what `search_kroger_products` actually returned, detecting hallucinated product names, prices, or UPCs.
 
-To change the eval judge model, update the `LLM` config in `agent.py`:
+**Tool Invocation** (on tool spans) — checks whether `search_kroger_products` was called with sensible arguments given the user's query (e.g. reasonable search terms, no hallucinated parameters).
+
+Both results are logged back to Phoenix as span annotations (`faithfulness`, `tool_invocation`) and visible alongside traces in the UI.
+
+To change the eval judge model, update the `LLM` config in `src/agent.py`:
 
 ```python
 llm = LLM(
-    provider="anthropic",
-    model="claude-sonnet-4-6",
-    client="anthropic",
-    api_key=os.getenv("ANTHROPIC_API_KEY"),
+    provider="openai",
+    model="qwen3-coder-next:cloud",
+    client="openai",
+    base_url="https://ollama.com/v1",
+    api_key=os.getenv("OLLAMA_API_KEY"),
 )
 ```
 
@@ -172,9 +171,9 @@ Strands Agent  ─────────────────────�
 OllamaModel (gpt-oss:120b-cloud)                              Arize Phoenix :6006
     │                                                                      │
     ▼                                                                      ▼
-search_kroger_products tool                                  Faithfulness Evals
-    │                                                         (Claude as judge)
-    ▼
+search_kroger_products tool                            Faithfulness Eval (agent spans)
+    │                                                  Tool Invocation Eval (tool spans)
+    ▼                                                         (Ollama as judge)
 Kroger Certification API
 ```
 
@@ -184,9 +183,6 @@ Kroger Certification API
 
 **Traces not appearing in Phoenix**
 Make sure Phoenix is running (`phoenix serve`) before starting the agent. Traces are flushed on exit — you won't see them until you type `exit`.
-
-**`No tool calls in response` during evals**
-The eval judge model doesn't support structured tool calls. Switch to Claude or GPT-4o as the judge (see eval config above).
 
 **Proxy / firewall blocking Arize Cloud**
 If you're on a corporate network, use local Phoenix (`phoenix serve`) instead of `otlp.arize.com`. The local setup requires no auth and bypasses proxy restrictions.
