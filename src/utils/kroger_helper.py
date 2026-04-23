@@ -1,5 +1,3 @@
-# utils/kroger_helper.py (recommended version for your project)
-
 import os
 import requests
 from typing import Optional
@@ -7,7 +5,6 @@ from typing import Optional
 def get_kroger_token(
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
-    cache: bool = True
 ) -> str:
     """
     Fetch Kroger Bearer token using client credentials grant.
@@ -19,7 +16,7 @@ def get_kroger_token(
     if not client_id or not client_secret:
         raise ValueError("Missing Kroger client_id or client_secret (check .env or args)")
 
-    url = "https://api.kroger.com/v1/connect/oauth2/token"
+    url = "https://api-ce.kroger.com/v1/connect/oauth2/token"
     data = {
         "grant_type": "client_credentials",
         "scope": "product.compact"  # add more scopes later if needed

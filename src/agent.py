@@ -1,8 +1,11 @@
 import pandas as pd
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 import os
 load_dotenv()
+
+SESSION_START = datetime.now(timezone.utc)
 
 #tracing
 from opentelemetry import trace
@@ -79,11 +82,8 @@ def _log_results(client, results_df, score_col, annotation_name):
 
     print(results_df[['score', 'label', 'explanation']].to_string())
 
-    annotations = pd.DataFrame({
-        'score':       results_df['score'].values,
-        'label':       results_df['label'].values,
-        'explanation': results_df['explanation'].values,
-    })
+    # results_df index is context.span_id (strings) — use it directly as the annotation index
+    annotations = results_df[['score', 'label', 'explanation']].copy()
     annotations.index.name = 'span_id'
 
     if not annotations.empty:
@@ -106,6 +106,14 @@ def run_evals():
         print("No spans found.")
         return
 
+    # Filter to only spans produced in this session
+    if 'start_time' in spans_df.columns:
+        spans_df = spans_df[spans_df['start_time'] >= SESSION_START]
+
+    if spans_df.empty:
+        print("No spans from this session.")
+        return
+
     agent_spans = spans_df[spans_df['span_kind'] == 'AGENT'].copy()
     tool_spans = spans_df[spans_df['span_kind'] == 'TOOL'].copy()
 
@@ -123,14 +131,25 @@ def run_evals():
             .rename(columns={'attributes.output.value': 'tool_context'})
         )
         agent_spans = agent_spans.merge(tool_context, on='context.trace_id', how='left')
-        agent_spans['tool_context'] = agent_spans['tool_context'].fillna(
-            agent_spans['attributes.output.value']
-        )
-    else:
-        agent_spans['tool_context'] = agent_spans['attributes.output.value']
+
+    # Drop spans with no Kroger tool output — faithfulness without real context is meaningless
+    if 'tool_context' not in agent_spans.columns:
+        print("No tool calls found — skipping faithfulness eval.")
+        return
+    agent_spans = agent_spans.dropna(subset=['tool_context'])
+    if agent_spans.empty:
+        print("No agent spans with Kroger tool output — skipping faithfulness eval.")
+        return
+
+    # Show what the judge will compare against so results can be audited
+    for _, row in agent_spans.iterrows():
+        print(f"\n[Faithfulness context for span {row['context.span_id'][:8]}...]")
+        print(f"  Input:   {str(row['attributes.input.value'])[:120]}")
+        print(f"  Context: {str(row['tool_context'])[:300]}")
+        print(f"  Output:  {str(row['attributes.output.value'])[:120]}")
 
     # --- Faithfulness: did the agent ground its response in actual Kroger results? ---
-    print(f"Running faithfulness evals on {len(agent_spans)} agent spans...")
+    print(f"\nRunning faithfulness evals on {len(agent_spans)} agent spans...")
 
     bound_faithfulness = bind_evaluator(
         evaluator=faithfulness_eval,
@@ -142,7 +161,9 @@ def run_evals():
     )
 
     with suppress_tracing():
-        faithfulness_results = evaluate_dataframe(agent_spans, [bound_faithfulness])
+        faithfulness_results = evaluate_dataframe(
+            agent_spans.set_index('context.span_id'), [bound_faithfulness]
+        )
 
     _log_results(client, faithfulness_results, "faithfulness_score", "faithfulness")
 
@@ -174,7 +195,9 @@ def run_evals():
         )
 
         with suppress_tracing():
-            tool_results = evaluate_dataframe(eval_tool_spans, [bound_tool_inv])
+            tool_results = evaluate_dataframe(
+                eval_tool_spans.set_index('context.span_id'), [bound_tool_inv]
+            )
 
         _log_results(client, tool_results, "tool_invocation_score", "tool_invocation")
 
